@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}Place Your Order - Tiffin Order System{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="text-center mb-8">
+        <h1 class="text-3xl font-bold text-gray-900 mb-2">Place Your Tiffin Order</h1>
+        <p class="text-gray-600">Fill out the form below to place your order</p>
+    </div>
+    
+    <div class="bg-white rounded-lg shadow-md overflow-hidden">
+        <div class="p-6 md:p-8">
+            <form action="{{ url_for('place_order') }}" method="POST" class="space-y-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="form-group">
+                        <label for="name" class="form-label">Full Name</label>
+                        <input type="text" id="name" name="name" required 
+                               class="form-input" placeholder="Enter your name">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="phone" class="form-label">Phone Number</label>
+                        <input type="tel" id="phone" name="phone" required
+                               class="form-input" placeholder="Enter your phone number">
+                    </div>
+                    
+                    <div class="form-group md:col-span-2">
+                        <label for="meal" class="form-label">Meal Type</label>
+                        <select id="meal" name="meal" required class="form-input">
+                            <option value="">Select a meal</option>
+                            <option value="Veg Thali">Veg Thali - ₹100</option>
+                            <option value="Non-Veg Thali">Non-Veg Thali - ₹150</option>
+                            <option value="Special Thali">Special Thali - ₹200</option>
+                            <option value="Diet Thali">Diet Thali - ₹180</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="quantity" class="form-label">Quantity</label>
+                        <input type="number" id="quantity" name="quantity" min="1" value="1" required
+                               class="form-input">
+                    </div>
+                    
+                    <div class="form-group md:col-span-2">
+                        <button type="submit" class="w-full btn">
+                            Place Order
+                        </button>
+                    </div>
+                </div>
+            </form>
+            
+            <div class="mt-6 pt-6 border-t border-gray-200 text-center">
+                <p class="text-sm text-gray-600">
+                    Need to check your orders? 
+                    <a href="{{ url_for('login') }}" class="text-blue-600 hover:text-blue-800 font-medium">
+                        Admin Login
+                    </a>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
