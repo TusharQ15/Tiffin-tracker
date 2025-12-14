@@ -63,7 +63,7 @@ def migrate_db():
     conn.close()
 
 def init_db():
-    conn = get_db_connection()
+    conn = get_db()
     cursor = conn.cursor()
     
     # Create orders table if it doesn't exist
