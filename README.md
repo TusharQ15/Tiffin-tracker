@@ -1,43 +1,107 @@
 # Tiffin Tracker
 
-A web application for managing tiffin (meal) orders with user authentication and admin dashboard.
+A modern web application for managing tiffin orders with real-time tracking and admin dashboard.
 
 ## Features
 
-- User registration and authentication
-- Place and track tiffin orders
-- Admin dashboard for order management
-- Responsive design with Tailwind CSS
-- Secure password hashing
-- Rate limiting for API endpoints
-- CSRF protection
-- SQLite database
+- **User Authentication**
+  - Secure login/logout
+  - User registration
+  - Admin dashboard
+  - Password hashing with bcrypt
+
+- **Order Management**
+  - Place new orders
+  - Track order status
+  - View order history
+  - Update delivery status
+
+- **Admin Features**
+  - View all orders
+  - Manage users
+  - Update order status
+  - Generate reports
+
+- **Responsive Design**
+  - Mobile-friendly
+  - Clean interface
+  - Built with Tailwind CSS
 
 ## Tech Stack
 
-- **Backend**: Python, Flask
-- **Frontend**: HTML5, Tailwind CSS, JavaScript
+- **Backend**: Python 3.8+, Flask
+- **Frontend**: HTML5, CSS3, JavaScript
 - **Database**: SQLite
 - **Authentication**: Session-based
+- **Styling**: Tailwind CSS
 - **Deployment**: Waitress (production WSGI server)
 
-## Prerequisites
+## Quick Start
 
-- Python 3.8+
+### Prerequisites
+- Python 3.8 or higher
 - pip (Python package manager)
 
-## Installation
+### Installation
 
 1. **Clone the repository**
    ```bash
    git clone https://github.com/yourusername/tiffin-tracker.git
    cd tiffin-tracker
+
+### Setup & Installation
+
+1. **Create and activate a virtual environment**
+   ```bash
+   # Windows
+   python -m venv venv
+   .\venv\Scripts\activate
+
+   # macOS/Linux
+   python3 -m venv venv
+   source venv/bin/activate
+   ```
+
+2. **Install dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **Initialize the database**
+   ```bash
+   # This will create the database with all necessary tables
+   python init_db.py
+   ```
+
+4. **Run the application**
+   ```bash
+   # Development server
+   flask run
+   
+   # Or for production
+   waitress-serve --port=5000 app:app
+   ```
+   The application will be available at `http://localhost:5000`
+
+## Screenshots
+
+### Login Page
+![Login Page](screenshots/login.png)
+
+### User Dashboard
+![User Dashboard](screenshots/dashboard.png)
+
+### Admin Panel
+![Admin Panel](screenshots/admin.png)
    ```
 
 2. **Create a virtual environment**
    ```bash
    python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   # On Windows:
+   venv\Scripts\activate
+   # On macOS/Linux:
+   source venv/bin/activate
    ```
 
 3. **Install dependencies**
@@ -47,32 +111,25 @@ A web application for managing tiffin (meal) orders with user authentication and
 
 4. **Initialize the database**
    ```bash
-   python -c "from app import init_db; init_db()"
+   python init_db.py
    ```
 
 ## Running the Application
 
-### Development
+### Development Mode
 ```bash
-export FLASK_APP=app.py
-export FLASK_ENV=development
+# Set environment variables
+set FLASK_APP=app.py
+set FLASK_ENV=development
+
+# Run the application
 flask run
 ```
 
-### Production
+### Production Mode
 ```bash
 # Using Waitress
 waitress-serve --port=5000 app:app
-```
-
-## Environment Variables
-
-Create a `.env` file in the root directory with the following variables:
-
-```env
-SECRET_KEY=your-secret-key-here
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=admin123  # Change this in production
 ```
 
 ## Default Admin Credentials
@@ -86,7 +143,6 @@ ADMIN_PASSWORD=admin123  # Change this in production
 tiffin-tracker/
 ├── app.py                # Main application
 ├── requirements.txt      # Python dependencies
-├── schema.sql           # Database schema
 ├── static/              # Static files (CSS, JS, images)
 │   └── css/
 │       └── style.css
@@ -94,28 +150,21 @@ tiffin-tracker/
 │   ├── base.html        # Base template
 │   ├── index.html       # Home page
 │   ├── login.html       # Login page
-│   ├── register.html    # Registration page
-│   ├── admin.html       # Admin dashboard
-│   └── error.html       # Error pages
-└── tiffin_orders.db     # SQLite database (created on first run)
+│   └── register.html    # Registration page
+└── tiffin_orders.db     # SQLite database file
 ```
 
-## Security Considerations
+## Security
 
-- All passwords are hashed using PBKDF2 with SHA-256
-- CSRF protection is enabled
+- Password hashing with PBKDF2
+- CSRF protection
 - Rate limiting on authentication endpoints
-- Secure session configuration
-- Input validation and sanitization
+- Secure session management
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License - See [LICENSE](LICENSE) for details.
 
-## Contributing
+## Support
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+For support, please open an issue in the GitHub repository.

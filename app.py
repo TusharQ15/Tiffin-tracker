@@ -1,351 +1,208 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash
-import sqlite3
-from datetime import datetime, timedelta
-from functools import wraps
+from flask import Flask, render_template, request, redirect, url_for, flash, session, g
 import os
-import secrets
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
+from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
+from functools import wraps
+from db_utils import get_db, close_db, query_db, get_user, get_user_by_username, create_user, get_orders, get_order, create_order, update_order_status, login_required, admin_required
 
-# Initialize Flask app
 app = Flask(__name__)
+app.secret_key = os.environ.get('SECRET_KEY') or 'dev-key-change-in-production'
 
-# Security configurations
-app.config.update(
-    SECRET_KEY=os.environ.get('SECRET_KEY') or secrets.token_hex(32),
-    PERMANENT_SESSION_LIFETIME=timedelta(minutes=30),
-    SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SECURE=False,  # Set to True in production with HTTPS
-    SESSION_COOKIE_SAMESITE='Lax',
-    MAX_CONTENT_LENGTH=16 * 1024 * 1024,  # 16MB max upload size
-    SQLALCHEMY_DATABASE_URI=f'sqlite:///{os.path.join(os.path.dirname(os.path.abspath(__file__)), "tiffin_orders.db")}',
-    SQLALCHEMY_TRACK_MODIFICATIONS=False
-)
-
-# Rate limiting
-limiter = Limiter(
-    app=app,
-    key_func=get_remote_address,
-    default_limits=["200 per day", "50 per hour"]
-)
-
-# Database configuration
-DATABASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tiffin_orders.db')
-
-# Admin credentials (in production, use a proper user database)
-ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', 'admin')
-ADMIN_PASSWORD_HASH = os.environ.get('ADMIN_PASSWORD_HASH', 
-    generate_password_hash('admin123', method='pbkdf2:sha256:600000'))
-
-def get_db_connection():
-    """Create and return a database connection with proper error handling."""
-    try:
-        conn = sqlite3.connect(DATABASE)
-        conn.row_factory = sqlite3.Row
-        # Enable foreign key support
-        conn.execute('PRAGMA foreign_keys = ON')
-        return conn
-    except sqlite3.Error as e:
-        app.logger.error(f"Database connection error: {e}")
-        raise
-
-def init_db():
-    """Initialize the database with the schema and default admin user."""
-    with app.app_context():
-        db = get_db_connection()
-        try:
-            with app.open_resource('schema.sql', mode='r') as f:
-                db.cursor().executescript(f.read())
-            
-            # Create default admin user if not exists
-            admin_hash = generate_password_hash('admin123', method='pbkdf2:sha256:600000')
-            db.execute("""
-                INSERT OR IGNORE INTO users (username, password_hash, is_admin)
-                VALUES (?, ?, 1)
-            """, ('admin', admin_hash))
-            
-            db.commit()
-            app.logger.info("Database initialized successfully")
-        except Exception as e:
-            db.rollback()
-            app.logger.error(f"Error initializing database: {e}")
-            raise
-        finally:
-            db.close()
-
-# Security middleware
-@app.after_request
-def add_security_headers(response):
-    response.headers['X-Content-Type-Options'] = 'nosniff'
-    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
-    response.headers['X-XSS-Protection'] = '1; mode=block'
-    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
-    return response
-
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'logged_in' not in session:
-            flash('Please log in to access this page.', 'warning')
-            session['next'] = request.url
-            return redirect(url_for('login'))
-        return f(*args, **kwargs)
-    return decorated_function
-
+# Make datetime available in templates
 @app.context_processor
 def inject_now():
     return {'now': datetime.now()}
 
+# Database connection management
+@app.before_request
+def before_request():
+    g.db = get_db()
+
+@app.teardown_appcontext
+def teardown_db(exception):
+    close_db(exception)
+
+def migrate_db():
+    """Update existing database schema"""
+    db = get_db()
+    cursor = db.cursor()
+    
+    # Check and update users table
+    cursor.execute("PRAGMA table_info(users)")
+    columns = [column[1] for column in cursor.fetchall()]
+    
+    if 'username' in columns and 'password' not in columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN password TEXT")
+        cursor.execute("ALTER TABLE users ADD COLUMN email TEXT")
+        cursor.execute("ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT 0")
+        cursor.execute("ALTER TABLE users ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        print("Added missing columns to users table")
+    
+    # Check and update orders table
+    cursor.execute("PRAGMA table_info(orders)")
+    order_columns = [column[1] for column in cursor.fetchall()]
+    
+    # Add all missing columns to orders table
+    required_columns = ['user_id', 'name', 'phone', 'address', 'meal', 'quantity', 'delivery_time', 'status', 'created_at']
+    for column in required_columns:
+        if column not in order_columns:
+            if column == 'user_id':
+                cursor.execute("ALTER TABLE orders ADD COLUMN user_id INTEGER")
+            elif column == 'status':
+                cursor.execute("ALTER TABLE orders ADD COLUMN status TEXT DEFAULT 'Received'")
+            elif column == 'created_at':
+                cursor.execute("ALTER TABLE orders ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+            elif column == 'quantity':
+                cursor.execute("ALTER TABLE orders ADD COLUMN quantity INTEGER")
+            else:
+                cursor.execute(f"ALTER TABLE orders ADD COLUMN {column} TEXT")
+            print(f"Added {column} column to orders table")
+    
+    conn.commit()
+    conn.close()
+
+def init_db():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Create orders table if it doesn't exist
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            name TEXT NOT NULL,
+            phone TEXT NOT NULL,
+            address TEXT NOT NULL,
+            meal TEXT NOT NULL,
+            quantity INTEGER NOT NULL,
+            delivery_time TEXT NOT NULL,
+            status TEXT DEFAULT 'Received',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+    ''')
+    
+    # Create users table if it doesn't exist
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            email TEXT UNIQUE,
+            is_admin BOOLEAN DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+
+# Routes
 @app.route('/')
-@login_required
-def home():
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        # Get user's orders with delivery information
-        cursor.execute('''
-            SELECT id, meal, quantity, status, delivery_address, 
-                   delivery_time, estimated_delivery, 
-                   strftime('%Y-%m-%d %H:%M', date) as order_date
-            FROM orders 
-            WHERE user_id = ? 
-            ORDER BY date DESC
-        ''', (session['user_id'],))
-        
-        orders = [dict(row) for row in cursor.fetchall()]
-        
-        # Get today's date for the order form
-        today = datetime.now().strftime('%Y-%m-%d')
-        
-        return render_template('index.html', orders=orders, today=today)
-        
-    except sqlite3.Error as e:
-        app.logger.error(f'Database error in home route: {e}')
-        flash('An error occurred while loading your orders', 'error')
-        return render_template('index.html', orders=[], today=datetime.now().strftime('%Y-%m-%d'))
-        
-    finally:
-        if 'conn' in locals():
-            conn.close()
+def index():
+    return render_template('index.html')
 
-@limiter.limit('10 per minute')
-@app.route('/order', methods=['POST'])
-@login_required
-def place_order():
-    if request.method == 'POST':
-        meal = request.form.get('meal')
-        quantity = request.form.get('quantity')
-        delivery_address = request.form.get('delivery_address')
-        delivery_time = request.form.get('delivery_time')
-        
-        # Basic validation
-        if not all([meal, quantity, delivery_address, delivery_time]):
-            flash('All fields are required', 'error')
-            return redirect(url_for('index'))
-        
-        try:
-            quantity = int(quantity)
-            if quantity < 1 or quantity > 10:
-                raise ValueError
-                
-            # Calculate estimated delivery time (current time + 30-40 minutes)
-            now = datetime.now()
-            estimated_delivery = (now + timedelta(minutes=35)).strftime('%I:%M %p')
-            
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            
-            # Get user ID from session
-            user_id = session.get('user_id')
-            
-            # Get user details
-            cursor.execute('SELECT name, phone FROM users WHERE id = ?', (user_id,))
-            user = cursor.fetchone()
-            
-            if not user:
-                flash('User not found', 'error')
-                return redirect(url_for('home'))
-                
-            # Insert order into database with delivery details
-            cursor.execute('''
-                INSERT INTO orders 
-                (user_id, name, phone, meal, quantity, delivery_address, 
-                 delivery_time, estimated_delivery, status, date, ip_address)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Order Placed', ?, ?)
-            ''', (
-                user_id,
-                user['name'],
-                user['phone'],
-                meal,
-                quantity,
-                delivery_address,
-                delivery_time,
-                estimated_delivery,
-                datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                request.remote_addr
-            ))
-            
-            conn.commit()
-            flash('Order placed successfully!', 'success')
-            return redirect(url_for('home'))
-            
-        except ValueError:
-            flash('Invalid quantity', 'error')
-            return redirect(url_for('index'))
-            
-        except sqlite3.Error as e:
-            app.logger.error(f'Database error: {e}')
-            flash('An error occurred while placing your order', 'error')
-            return redirect(url_for('index'))
-            
-        finally:
-            if 'conn' in locals():
-                conn.close()
-
-@limiter.limit('5 per minute')
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
+        username = request.form['username']
+        password = request.form['password']
+        email = request.form.get('email')
         
-        if not username or not password:
-            flash('Username and password are required', 'error')
-            return redirect(url_for('register'))
+        try:
+            create_user(username, password, email)
+            flash('Registration successful! Please log in.', 'success')
+            return redirect(url_for('login'))
+        except sqlite3.IntegrityError:
+            flash('Username or email already exists.', 'danger')
             
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        # Check if user already exists
-        cursor.execute('SELECT * FROM users WHERE username = ?', (username,))
-        if cursor.fetchone() is not None:
-            flash('Username already exists', 'error')
-            return redirect(url_for('register'))
-            
-        # Create new user
-        hashed_password = generate_password_hash(password)
-        cursor.execute('INSERT INTO users (username, password_hash, is_admin) VALUES (?, ?, ?)',
-                     (username, hashed_password, False))
-        conn.commit()
-        conn.close()
-        
-        flash('Registration successful! Please log in.', 'success')
-        return redirect(url_for('login'))
-        
     return render_template('register.html')
 
-@limiter.limit('5 per minute')
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
+        username = request.form['username']
+        password = request.form['password']
         
-        conn = get_db_connection()
-        user = conn.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()
-        conn.close()
+        user = get_user_by_username(username)
         
-        if user and check_password_hash(user['password_hash'], password):
-            session['user_id'] = user['id']
-            session['username'] = user['username']
-            session['is_admin'] = bool(user['is_admin'])
-            session['logged_in'] = True
-            
-            if user['is_admin']:
-                return redirect(url_for('admin'))
-            return redirect(url_for('home'))
-            next_page = session.pop('next', None) or url_for('admin')
-            return redirect(next_page)
-        else:
-            # Simulate password verification delay to prevent timing attacks
-            check_password_hash(ADMIN_PASSWORD_HASH, secrets.token_hex(16))
-            flash('Invalid username or password', 'error')
+        if user is None or not check_password_hash(user['password'], password):
+            flash('Invalid username or password', 'danger')
+            return redirect(url_for('login'))
+        
+        session.clear()
+        session['user_id'] = user['id']
+        session['is_admin'] = bool(user['is_admin'])
+        
+        # Update last login time
+        query_db('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?', (user['id'],))
+        
+        flash(f'Welcome back, {username}!', 'success')
+        return redirect(url_for('profile'))
     
     return render_template('login.html')
 
 @app.route('/logout')
 def logout():
-    # Clear the session
     session.clear()
-    # Create a new session to prevent session fixation
-    session.regenerate()
-    flash('You have been logged out successfully.', 'success')
-    return redirect(url_for('home'))
+    flash('You have been logged out.', 'info')
+    return redirect(url_for('index'))
+
+@app.route('/profile')
+@login_required
+def profile():
+    user_orders = get_orders(session['user_id'])
+    return render_template('profile.html', orders=user_orders)
+
+@app.route('/order', methods=['GET', 'POST'])
+@login_required
+def place_order():
+    if request.method == 'POST':
+        name = request.form['name']
+        phone = request.form['phone']
+        address = request.form['address']
+        meal = request.form['meal']
+        quantity = int(request.form['quantity'])
+        delivery_time = request.form['delivery_time']
+        
+        create_order(session['user_id'], name, phone, address, meal, quantity, delivery_time)
+        
+        flash('Order placed successfully!', 'success')
+        return redirect(url_for('profile'))
+    
+    return render_template('order.html')
 
 @app.route('/admin')
-@login_required
+@admin_required
 def admin():
-    conn = sqlite3.connect('orders.db')
-    c = conn.cursor()
-    c.execute("SELECT * FROM orders ORDER BY date DESC")
-    orders = c.fetchall()
-    conn.close()
-    return render_template('admin.html', orders=orders)
+    orders = get_orders()
+    users = query_db('SELECT id, username, email, is_admin FROM users')
+    return render_template('admin.html', orders=orders, users=users)
 
-def create_app():
-    # Initialize database if it doesn't exist
-    if not os.path.exists(DATABASE):
-        init_db()
-    
-    # Add error handlers
-    @app.errorhandler(404)
-    def not_found_error(error):
-        return """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>404 - Page Not Found</title>
-            <style>
-                body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
-                h1 { color: #dc3545; }
-                a { color: #007bff; text-decoration: none; }
-            </style>
-        </head>
-        <body>
-            <h1>404 - Page Not Found</h1>
-            <p>The page you're looking for doesn't exist.</p>
-            <p><a href="{{ url_for('home') }}">Go to Homepage</a></p>
-        </body>
-        </html>
-        """, 404
-    
-    @app.errorhandler(500)
-    def internal_error(error):
-        if 'db' in locals():
-            db.rollback()
-        app.logger.error(f'500 Error: {error}')
-        return """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>500 - Internal Server Error</title>
-            <style>
-                body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
-                h1 { color: #dc3545; }
-                a { color: #007bff; text-decoration: none; }
-            </style>
-        </head>
-        <body>
-            <h1>500 - Internal Server Error</h1>
-            <p>An unexpected error occurred. Please try again later.</p>
-            <p><a href="{{ url_for('home') }}">Go to Homepage</a></p>
-        </body>
-        </html>
-        """, 500
-    
-    return app
+@app.route('/admin/order/<int:order_id>/update', methods=['POST'])
+@admin_required
+def update_order(order_id):
+    status = request.form['status']
+    update_order_status(order_id, status)
+    flash('Order status updated!', 'success')
+    return redirect(url_for('admin'))
 
 if __name__ == '__main__':
-    app = create_app()
+    # Initialize database if it doesn't exist
+    if not os.path.exists('tiffin_orders.db'):
+        try:
+            init_db()
+            print("✅ Database initialized successfully")
+        except Exception as e:
+            print(f"❌ Error initializing database: {e}")
     
-    # For development
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    # Always run migrations to ensure schema is up to date
+    try:
+        migrate_db()
+        print("✅ Database migration completed")
+    except Exception as e:
+        print(f"⚠️ Database migration completed with warnings: {e}")
     
-    # For production (uncomment when deploying)
-    # from waitress import serve
-    # serve(app, host="0.0.0.0", port=5000)
-    print("Server is running at http://127.0.0.1:5000")
-    print("Admin panel: http://127.0.0.1:5000/admin")
-    # serve(app, host='0.0.0.0', port=5000)
+    # Run the app
+    try:
+        print("\n🚀 Starting Tiffin Tracker application...")
+        print(f"🌐 Server running at: http://localhost:5000")
+        print("🛑 Press Ctrl+C to stop the server\n")
+        app.run(debug=True, host='0.0.0.0', port=5000)
+    except Exception as e:
+        print(f"❌ Error starting the application: {e}")
