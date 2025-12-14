@@ -92,6 +92,8 @@ def init_db():
             email TEXT UNIQUE,
             is_admin BOOLEAN DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
 
 # Routes
 @app.route('/')
