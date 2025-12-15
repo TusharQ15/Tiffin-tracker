@@ -1,43 +1,62 @@
 ﻿import os
+import sys
 import tempfile
 import pytest
-from app import create_app, db
+
+# Add the project root to the Python path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+# Import after adding to path
+from flask import Flask
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import LoginManager
+
+# Initialize extensions
+db = SQLAlchemy()
+login_manager = LoginManager()
+
+# Import models after db is defined
 from app.models.user import User
+
+def create_test_app():
+    """Create a Flask application for testing."""
+    app = Flask(__name__)
+    app.config['TESTING'] = True
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app.config['WTF_CSRF_ENABLED'] = False
+    app.config['SECRET_KEY'] = 'test-secret-key'
+    
+    # Initialize extensions
+    db.init_app(app)
+    login_manager.init_app(app)
+    
+    # Register blueprints and routes would go here
+    
+    return app
 
 @pytest.fixture(scope='module')
 def app():
     """Create and configure a new app instance for testing."""
-    # Create a temporary file to isolate the database for each test
-    db_fd, db_path = tempfile.mkstemp(suffix='.db')
+    app = create_test_app()
     
-    app = create_app({
-        'TESTING': True,
-        'SQLALCHEMY_DATABASE_URI': f'sqlite:///{db_path}',
-        'WTF_CSRF_ENABLED': False,
-        'SECRET_KEY': 'test-secret-key'
-    })
+    # Create test client and context
+    ctx = app.app_context()
+    ctx.push()
+    
+    # Create tables and add test data
+    db.create_all()
+    user = User(username='testuser', email='test@example.com')
+    user.set_password('testpass123')
+    db.session.add(user)
+    db.session.commit()
 
-    # Create the database and load test data
-    with app.app_context():
-        db.create_all()
-        # Create a test user
-        user = User(username='testuser', email='test@example.com')
-        user.set_password('testpass123')
-        db.session.add(user)
-        db.session.commit()
-        
     yield app
     
-    # Clean up the database file
-    with app.app_context():
-        db.session.remove()
-        db.drop_all()
-    os.close(db_fd)
-    try:
-        os.unlink(db_path)
-    except PermissionError:
-        # Windows can be slow to release file handles
-        pass
+    # Clean up
+    db.session.remove()
+    db.drop_all()
+    ctx.pop()
 
 @pytest.fixture
 def client(app):
