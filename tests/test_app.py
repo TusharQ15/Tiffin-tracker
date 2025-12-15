@@ -1,4 +1,5 @@
-﻿# Test file: tests/test_app.py
+﻿"""Test cases for the Tiffin Tracker application."""
+
 def test_app_creation(app):
     """Test that the app is created with the correct configuration."""
     assert app is not None
@@ -23,5 +24,44 @@ def test_static_files(client):
     assert response.status_code == 200
     assert response.content_type == 'text/css; charset=utf-8'
 
-def test_app_creation(client):
-    assert client.get('/').status_code == 200
+def test_login_page(client):
+    """Test that the login page loads successfully."""
+    response = client.get('/login')
+    assert response.status_code == 200
+    assert b'Login' in response.data
+    assert b'username' in response.data.lower()
+    assert b'password' in response.data.lower()
+
+def test_valid_login(client):
+    """Test that a user can log in with valid credentials."""
+    response = client.post('/login', data={
+        'username': 'testuser',
+        'password': 'testpass123'
+    }, follow_redirects=True)
+    assert response.status_code == 200
+    assert b'Logout' in response.data
+
+def test_invalid_login(client):
+    """Test that invalid login fails."""
+    response = client.post('/login', data={
+        'username': 'testuser',
+        'password': 'wrongpassword'
+    }, follow_redirects=True)
+    assert b'Invalid username or password' in response.data
+
+def test_protected_route_unauthorized(client):
+    """Test that protected routes redirect to login when not authenticated."""
+    response = client.get('/profile', follow_redirects=True)
+    assert b'Please log in to access this page' in response.data
+
+def test_protected_route_authorized(auth_client):
+    """Test that protected routes are accessible when authenticated."""
+    response = auth_client.get('/profile')
+    assert response.status_code == 200
+    assert b'Profile' in response.data
+
+def test_logout(auth_client):
+    """Test that a user can log out."""
+    response = auth_client.get('/logout', follow_redirects=True)
+    assert response.status_code == 200
+    assert b'You have been logged out' in response.data
