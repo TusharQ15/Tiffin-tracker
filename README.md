@@ -8,34 +8,20 @@ A web application for managing tiffin orders with user authentication and order 
   - User registration and login/logout
   - Password hashing using Werkzeug's security utilities
   - Session-based authentication using Flask's session
-
 - **Order Management**
   - Place new tiffin orders
   - View order status updates
-
 - **Admin Features**
   - View all user orders
   - Update order status
 
 ## Tech Stack
 
-- **Backend**
-  - Python 3.8+
-  - Flask
-
-- **Frontend**
-  - HTML5
-  - Basic JavaScript
-  - Tailwind CSS (via CDN)
-
-- **Database**
-  - SQLite
-
-- **Authentication**
-  - Flask's session management
-
-- **Development**
-  - Pytest for testing
+- **Backend**: Python 3.8+, Flask
+- **Frontend**: HTML5, Basic JavaScript, Tailwind CSS (via CDN)
+- **Database**: SQLite
+- **Authentication**: Flask's session management
+- **Development**: Pytest for testing
 
 ## Setup
 
@@ -50,14 +36,14 @@ A web application for managing tiffin orders with user authentication and order 
 
    **Windows (PowerShell)**
    ```
-   python -m venv venv
-   venv\Scripts\activate
+python -m venv venv
+venv\Scripts\activate
    ```
 
    **macOS/Linux**
    ```
-   python3 -m venv venv
-   source venv/bin/activate
+python3 -m venv venv
+source venv/bin/activate
    ```
 
 3. **Install dependencies**
@@ -76,27 +62,25 @@ A web application for managing tiffin orders with user authentication and order 
 
 Set environment variables (Windows PowerShell):
 
-```
+```powershell
 $env:FLASK_APP = "app.py"
 $env:FLASK_ENV = "development"
 ```
 
 Or on macOS/Linux:
 
-```
+```bash
 export FLASK_APP=app.py
 export FLASK_ENV=development
 ```
 
 Run the app:
 
-```
+```bash
 flask run
 ```
 
 The application will be available at `http://localhost:5000`
-
-### Development Credentials
 
 ### Development Credentials
 
@@ -138,7 +122,6 @@ tiffin-tracker/
 - **Data Protection**
   - Password hashing for stored passwords
   - Secure session management
-
 - **Authentication**
   - Session-based authentication
   - Secure cookie handling
