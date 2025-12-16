@@ -19,10 +19,16 @@ venv/
 *.log
 *.sql
 
-# Project directories to exclude
-/DSA Practice/
-/Tiffin Tracker project/
-/Python_Practice/
-/SYBSC_CS/
-/leetcodeCompany_wise_practice/
-/Python/
+# Project specific exclusions (don't ignore the entire directories)
+/DSA Practice/__pycache__/
+/DSA Practice/*.pyc
+/Tiffin Tracker project/__pycache__/
+/Tiffin Tracker project/*.pyc
+/Python_Practice/__pycache__/
+/Python_Practice/*.pyc
+/SYBSC_CS/__pycache__/
+/SYBSC_CS/*.pyc
+/leetcodeCompany_wise_practice/__pycache__/
+/leetcodeCompany_wise_practice/*.pyc
+/Python/__pycache__/
+/Python/*.pyc
